@@ -50,12 +50,15 @@ class Database(object):
             print("An error occurred.")
             
     @staticmethod
-    def query_topics(collection:str,keywords:str,limit:int=100):
-        row = Database.SESSION.execute("select * from "+collection+" WHERE topics CONTAINS '"+keywords+"' limit "+str(limit)+";")
+    def query_topics(collection:str,keywords:str,limit:int=0):
+        if limit==0:
+            row = Database.SESSION.execute("select * from "+collection+" WHERE topics CONTAINS '"+keywords+"' ;")
+        else:
+            row = Database.SESSION.execute("select * from "+collection+" WHERE topics CONTAINS '"+keywords+"' limit "+str(limit)+";")
         if row:
             return list(row)
         else:
-            print("An error occurred.")
+            raise Exception("An error occurred.")
             
     @staticmethod
     def change_column_type(table:str,column:str,datatype:str):

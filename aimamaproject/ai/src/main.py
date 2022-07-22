@@ -1,18 +1,25 @@
+from cmath import log
 import json
 import ast
+import logging
 from urllib import response
-
-from attr import assoc
 from pkg_resources import working_set
 import numpy as np
 import pandas as pd
 from apyori import apriori
 from django.conf import settings
 import re
+#import nest_asyncio
 import math
 from numpy import linalg as LA
+#import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 
+#nest_asyncio.apply()
+
+def findWholeWord(word:str):
+    return re.compile(r'\b({0})\b'.format(word), flags=re.IGNORECASE).search
 
 def mapsets(results:list):
     response:list=[]
@@ -29,7 +36,8 @@ def mapsets(results:list):
         Data['fullText'] = idx.fullText
         Data['publisher'] = idx.publisher
         Data['abstract'] = idx.abstract
-        Data['datePublished']= idx.datePublished
+        Data['datePublished']= idx.datePublished.strftime('%Y-%m-%d')
+        Data['datePublishedYear'] = idx.datePublished.strftime('%Y')
         Data['dateUpdated'] = idx.dateUpdated
         Data['pdfHashValue'] = idx.pdfHashValue
         Data['year'] = idx.year
@@ -66,6 +74,7 @@ class Associations:
     def __init__(self):
         self.Exe = ['NORP','LOC','GPE', 'New research','Article',"Research"]
         self.cleaned_words = []
+        self.logger = logging.getLogger() 
     
     def __call__(self):
         pass
@@ -117,12 +126,14 @@ class Associations:
     def consine_similarity(self,v1, v2):
         return np.dot(v1,v2)/float(LA.norm(v1)*LA.norm(v2))
     
-    def compute_relevance(self,query, documents):
+    def compute_relevance(self,query_vector, documents):
         scores:list[float] = []
         for i, doc in enumerate(documents):
-            similarity = self.consine_similarity(self.tf_idf_matrix[:,i].reshape(1, len(self.tf_idf_matrix)), self.query_vector)
-            if float(similarity[0])>0.80:
-                scores.append(similarity[0])
+            if any(self.tf_idf_matrix[:,i].reshape(1, len(self.tf_idf_matrix)) and query_vector):
+                similarity = self.consine_similarity(self.tf_idf_matrix[:,i].reshape(1, len(self.tf_idf_matrix)), query_vector)
+                if float(similarity[0])>0.80:
+                    scores.append(similarity[0].tolist())
+        scores = [idx[0] for idx in scores if scores]
         return math.ceil(sum(scores)/len(documents))
     
     def add_unwanted_keywords(self,query:str):
@@ -138,7 +149,7 @@ class Associations:
     
     def filtering_Location(self,string:str):
         results = []
-        for idx in documents:
+        for idx in string:
             idx = idx.strip().capitalize()
             if idx in self.Exe:
                 continue
@@ -183,6 +194,7 @@ class Associations:
             support    = [result[1] for result in output]
             confidence = [result[2][0][2] for result in output]
             lift       = [result[2][0][3] for result in output]
+            #desity     = [idx*0.0 for idx in range(len(output))] 
             return list(zip(lhs, rhs, support, confidence, lift))
     
     def process_data(self,json_obj):
@@ -206,19 +218,77 @@ class Associations:
             articles.append([str(working_dataset.values[i,j]) for j in range(0,weight)])
         return articles,association_dataset
     
-    def fetch_documents(self,association_dataset):
+    def fetch_documents(self,association_dataset:pd.DataFrame):
         documents = association_dataset.fullText.dropna().tolist()
         return [idx for idx in documents if idx!='None']
     
-    def pipeline(self,results:list):
+    def get_density(self,keyword:str)->dict:
+        self.tf_idf_matrix = self.generateVectors(keyword, self.documents)
+        query_vector = self.build_query_vector(keyword, self.documents)
+        return {keyword:self.compute_relevance(query_vector, self.documents)}
+    
+    def apply_density(self,keywords:list):
+        #results:dict ={}
+        with ThreadPoolExecutor(max_workers=len(keywords)//2) as executor:
+            results = list(executor.map(self.get_density, keywords))
+        #results = await asyncio.gather(*[self.get_density(url) for url in keywords])
+        #logging.info(results_async)
+        """for idx in keywords:
+            score = await self.get_density(idx)
+            if idx in results:
+                results[idx]+=score
+            else:
+                results[idx]=score"""
+        return results
+        
+    def apply_associations(self, associated_word_density:dict, output_DataFrame:dict):
+        if output_DataFrame['Left_Hand_Side'] in associated_word_density:
+            output_DataFrame['Desity'] = associated_word_density[output_DataFrame['Left_Hand_Side']]
+        elif output_DataFrame['Right_Hand_Side'] in associated_word_density:
+            output_DataFrame['Desity'] = associated_word_density[output_DataFrame['Right_Hand_Side']]
+        elif output_DataFrame['Right_Hand_Side'] in associated_word_density and output_DataFrame['Left_Hand_Side'] in associated_word_density:
+            output_DataFrame['Desity'] = associated_word_density[output_DataFrame['Right_Hand_Side']]+associated_word_density[output_DataFrame['Left_Hand_Side']]
+        else:
+            output_DataFrame['Desity'] = 0.0
+        return output_DataFrame
+    
+    def indirect_association(self,keyword:str,output:list):
+        results = []
+        for element in output:
+            if keyword.strip() == element['Left_Hand_Side'] or keyword.strip() == element['Right_Hand_Side']:
+                element['association'] = "direct"  
+            elif findWholeWord(keyword)(element['Left_Hand_Side'])  or findWholeWord(keyword)(element['Right_Hand_Side']):
+                element['association'] = "in-direct" 
+            
+            results.append(element)
+        return results
+                 
+    def pipeline(self,keyword:str,results:list,min_support:float=0.003,min_lift:int=3,min_length:int=1,max_length:int=2):
         response = mapsets(results)
+        self.logger.info("Mapping Set Function Executed")
         articles,association_dataset = self.process_data(response)
-        rule = apriori(articles, min_support = 0.003, min_lift = 3, min_length = 1, max_length = 2)
-        output = list(rule)
+        self.logger.info("Associations Created")
+        self.documents = self.fetch_documents(association_dataset)
+        self.logger.info("Documents Created")
+        output = list(apriori(articles, min_support = min_support, min_lift = min_lift, min_length = min_length, max_length = max_length))
+        self.logger.info("Output Created")
+        #output_DataFrame = pd.DataFrame(self.inspect(output), columns = ['Left_Hand_Side', 'Right_Hand_Side', 'Support', 'Confidence', 'Lift', 'Desity'])
         output_DataFrame = pd.DataFrame(self.inspect(output), columns = ['Left_Hand_Side', 'Right_Hand_Side', 'Support', 'Confidence', 'Lift'])
-        self.tf_idf_matrix = self.generateVectors(query, self.documents)
-        self.query_vector = self.build_query_vector(query, self.documents)
-        pass
-
-
-
+        self.logger.info("Output DataFrame Created")
+        associated_query = output_DataFrame[(output_DataFrame['Left_Hand_Side'].str.contains(keyword.lower()))|(output_DataFrame['Right_Hand_Side'].str.contains(keyword.lower()))]
+        self.logger.info("Associated Query Created")
+        associated_query_dict = associated_query.to_dict(orient='records')
+        self.logger.info("Associated Query DICTIONARY Created")
+        associated_query_dict = self.indirect_association(keyword,associated_query_dict)
+        #associated_words = list(set(associated_query['Right_Hand_Side'].unique()).union(set(associated_query['Left_Hand_Side'].unique())))
+        #self.logger.info("Associated Words Created")
+        #associated_words = self.filtering_Location(associated_words)
+        #self.logger.info("Associated Words II Created")
+        #self.logger.info(associated_words)
+        #associated_word_density = [self.get_density(idx) for idx in associated_words]
+        #self.logger.info("Associated Words Density Created")
+        #self.logger.info(associated_word_density)
+        #associated_output = output_DataFrame.apply(lambda x:self.apply_associations(associated_word_density,x),axis=1)
+        #logging.info(associated_query_dict)
+        #logging.info(associated_output.to_dict())
+        return associated_query_dict
