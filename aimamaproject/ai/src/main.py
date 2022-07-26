@@ -8,20 +8,22 @@ import numpy as np
 import pandas as pd
 from apyori import apriori
 from django.conf import settings
+import requests
 import re
-#import nest_asyncio
+import nest_asyncio
+import aiohttp
 import math
 from numpy import linalg as LA
-#import asyncio
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-
-#nest_asyncio.apply()
+nest_asyncio.apply()
 
 def findWholeWord(word:str):
     return re.compile(r'\b({0})\b'.format(word), flags=re.IGNORECASE).search
 
-def mapsets(results:list):
+def mapsets(results:list,remove_cols:list):
     response:list=[]
     for _,idx in enumerate(results):
         Data:dict = {}
@@ -65,10 +67,80 @@ def mapsets(results:list):
             Data['journals'] = journals
         else:
             Data['journals'] = None
+        for idx in remove_cols:
+            del Data[idx]
         response.append(Data)
     return response
 
 
+class citations:
+    def __init__(self):
+        self.coreUrl = "https://opencitations.net/index/api/v1/"
+    
+    async def fetchCitationsCount(self, doi:str)->dict:
+        try:
+            response = requests.get(self.coreUrl + "/citation-count/{}".format(doi))
+            return response.json()
+        except Exception as e:
+            return {"data":[],"messages":"Error:->{}".format(e)}
+        
+    async def fetchCitations(self,doi:str)->dict:
+        try:
+            response = requests.get(self.coreUrl + "/citations/{}".format(doi))
+            return response.json()
+        except Exception as e:
+            return {"data":[],"messages":"Error:->{}".format(e)}
+    
+    async def fetchRefrences(self,doi:str)->dict:
+        try:
+            response = requests.get(self.coreUrl + "/references/{}".format(doi))
+            return response.json()
+        except Exception as e:
+            return {"data":[],"messages":"Error:->{}".format(e)}
+    
+    async def fetchRefrencesCount(self,doi:str)->dict:
+        try:
+            response = requests.get(self.coreUrl + "/reference-count/{}".format(doi))
+            return response.json()
+        except Exception as e:
+            return {"data":[],"messages":"Error:->{}".format(e)}
+        
+    async def fetchCitationMetaInfo(self,oci:str)->dict:
+        try:
+            response = requests.get(self.coreUrl + "/citation/{}".format(oci))
+            return response.json()
+        except Exception as e:
+            return {"data":[],"messages":"Error:->{}".format(e)}
+        
+    async def fetchMetadata(self,doi:str)->dict:
+        try:
+            response = requests.get(self.coreUrl + "/metadata/{}".format(doi))
+            return response.json()
+        except Exception as e:
+            return {"data":[],"messages":"Error:->{}".format(e)}
+        
+    async def gather_with_concurrency(self,n, *tasks):
+        semaphore = asyncio.Semaphore(n)
+        async def sem_task(task):
+            async with semaphore:
+                return await task
+
+        return await asyncio.gather(*(sem_task(task) for task in tasks))
+
+    async def get_async(self,url, session, results):
+        async with session.get(url) as response:
+            i = url.split('/')[-1]
+            obj = await response.text()
+            results[i] = obj
+        
+    async def fetchBulkcitations(self,urls:list)->dict:
+        conn = aiohttp.TCPConnector(limit=None, ttl_dns_cache=300)
+        session = aiohttp.ClientSession(connector=conn)
+        results = {}
+        conc_req = len(urls)//2
+        await self.gather_with_concurrency(conc_req, *[self.get_async(i, session, results) for i in urls])
+        return results
+      
 
 class Associations:
     def __init__(self):
@@ -115,13 +187,6 @@ class Associations:
             else:
                 counts[word] = 1
         return counts
-    
-    def build_query_vector(self,query, documents):
-        count = self.word_count(query)
-        vector = np.zeros((len(count),1))
-        for i, word in enumerate(query.lower().split()):
-            vector[i] = float(count[word])/len(count) * self.inverseDocumentFrequency(word, documents)
-        return vector
     
     def consine_similarity(self,v1, v2):
         return np.dot(v1,v2)/float(LA.norm(v1)*LA.norm(v2))
@@ -227,19 +292,15 @@ class Associations:
         query_vector = self.build_query_vector(keyword, self.documents)
         return {keyword:self.compute_relevance(query_vector, self.documents)}
     
-    def apply_density(self,keywords:list):
-        #results:dict ={}
-        with ThreadPoolExecutor(max_workers=len(keywords)//2) as executor:
-            results = list(executor.map(self.get_density, keywords))
-        #results = await asyncio.gather(*[self.get_density(url) for url in keywords])
-        #logging.info(results_async)
-        """for idx in keywords:
-            score = await self.get_density(idx)
-            if idx in results:
-                results[idx]+=score
-            else:
-                results[idx]=score"""
-        return results
+    def computeDocumentTfidf(self,documents:list):
+        self.tf = TfidfVectorizer(analyzer='word')
+        self.tfidf_matrix =  self.tf.fit_transform(documents)
+        
+    def build_query_vector(self,query:list):
+        self.query_vector = self.tf.transform(query)
+    
+    def apply_density(self):
+        pass
         
     def apply_associations(self, associated_word_density:dict, output_DataFrame:dict):
         if output_DataFrame['Left_Hand_Side'] in associated_word_density:
@@ -258,10 +319,13 @@ class Associations:
             if keyword.strip() == element['Left_Hand_Side'] or keyword.strip() == element['Right_Hand_Side']:
                 element['association'] = "direct"  
             elif findWholeWord(keyword)(element['Left_Hand_Side'])  or findWholeWord(keyword)(element['Right_Hand_Side']):
-                element['association'] = "in-direct" 
-            
+                element['association'] = "in-direct"
             results.append(element)
         return results
+    
+    def normalizeOutput(self):
+        pass
+            
                  
     def pipeline(self,keyword:str,results:list,min_support:float=0.003,min_lift:int=3,min_length:int=1,max_length:int=2):
         response = mapsets(results)

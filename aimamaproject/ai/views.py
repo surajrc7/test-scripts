@@ -99,7 +99,7 @@ class COREFetch(GenericAPIView):  # generics.CreateAPIView
         Database = settings.MONGO.find_one(collection='userapp_user',query={'_id':objInstance}) #62cb0800822bd4f866bb1284
         if Database:
             rows = settings.CASSANDRA.query_topics(collection="datasource_core",keywords=text,limit=100)
-            records = main.mapsets(list(rows))
+            records = main.mapsets(list(rows),remove_cols=["fullText","abstract"])
             response_dict = {"RawText": text, "ProcessedData": records,
                         'ProcessedDate': datetime.utcnow().__str__(),
                         "RequestID": request_id, "status": 200,
@@ -172,7 +172,7 @@ class CORETimeline(GenericAPIView):  # generics.CreateAPIView
         if Database:
             try:
                 rows = settings.CASSANDRA.query_topics(collection="datasource_core",keywords=text)
-                records = main.mapsets(list(rows))
+                records = main.mapsets(list(rows),remove_cols=["fullText","abstract",])
                 records.sort(key=lambda x:x['datePublishedYear'])
                 result:dict = {}
                 for k,v in groupby(records,key=lambda x:x['datePublishedYear']):
