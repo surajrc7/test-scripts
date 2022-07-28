@@ -32,6 +32,6 @@ jobs:
 #         python manage.py test
         
     - name: Build
-      working-directory: ./aimamaproject
+      working-directory: ./project
       run: |
         python manage.py runserver
