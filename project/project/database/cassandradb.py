@@ -14,7 +14,7 @@ MODEL_DIR = os.path.join(BASE_DIR, 'models')
 
 class Database(object):
     CLOUD_CONFIG= {
-                    'secure_connect_bundle':os.path.join(MODEL_DIR,str(os.getenv('SECURE_CONNECTION')))
+                    'secure_connect_bundle':os.path.join(MODEL_DIR,"secure-connect-research-contents.zip")
                     }
     CLIENT_ID = os.getenv('CASSANDRA_CLIENT_ID')
     CLIENT_PASSWORD = os.getenv('CASSANDRA_CLIENT_PASSWORD')
