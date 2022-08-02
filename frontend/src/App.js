@@ -11,19 +11,17 @@ import AuthContextProvider from "./contexts/AuthContextProvider";
 import RequireAuth from "./components/RequireAuth";
 import RequireNotAuth from "./components/RequireNotAuth";
 import BaseLayout from "./components/BaseLayout";
-import InLayout from "./components/InLayout";
-import "./index.css";
 import RequestResetPassword from "./pages/Auth/RequestResetPassword";
 import ResetPasswordConfirm from "./pages/Auth/ResetPasswordConfirm";
+//import Tasks from "./pages/Tasks";
+//import TaskDetails from "./pages/Tasks/TaskDetails";
+//import Dashboard from "./pages/Dashboard";
 import ThemeModeProvider from "./contexts/ThemeModeProvider";
-import Admin from "./pages/Admin"
 import SwaggerApi from "./pages/SwaggerAPI";
 
 export default function App() {
   return <ThemeModeProvider>
     <CssBaseline />
-
-
     <AuthContextProvider>
       <SnackbarProvider>
         <Router>
@@ -44,14 +42,11 @@ export default function App() {
               </Route>
 
               <Route element={<RequireNotAuth />} >
-              <Route element={<InLayout />}>
                 <Route path="/auth/signup" element={<SignUp />} />
                 <Route path="/auth/signin" element={<SignIn />} />
                 <Route path="/auth/password-reset" element={<RequestResetPassword />} />
                 <Route path="/auth/password-reset/confirm/:uid/:token" element={<ResetPasswordConfirm />} />
               </Route>
-              </Route>
-
             </Routes>
           </Box>
         </Router>

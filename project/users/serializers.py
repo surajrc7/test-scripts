@@ -12,6 +12,13 @@ User = get_user_model()
 class OpenAPISerializer(Serializer):
     class Meta():
         Text = serializers.CharField(label='Text as input', required=True)
+        
+class CoreAPISerializer(Serializer):
+    class Meta:
+        error_status_codes = {
+            HTTP_400_BAD_REQUEST: 'Bad Request'
+        }
+    CoreId = serializers.CharField(label='CoreId as input', required=True)
 
 class TextSerializer(Serializer):
     class Meta:

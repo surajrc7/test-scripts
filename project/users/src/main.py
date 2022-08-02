@@ -1,3 +1,4 @@
+from asyncio.log import logger
 from cmath import log
 from dataclasses import dataclass
 import json
@@ -19,6 +20,7 @@ from numpy import linalg as LA
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.feature_extraction.text import TfidfVectorizer
+import uuid
 
 #nest_asyncio.apply()
 
@@ -75,6 +77,54 @@ def mapsets(results:list,remove_cols:list):
         response.append(Data)
     return response
 
+def mapdicts(idx,remove_cols:list):
+    print(idx)
+    Data:dict = {}
+    Data['uuid']=idx.uuid
+    Data['doi'] = idx.doi
+    Data['coreId'] = idx.coreId
+    Data['title'] = idx.title
+    Data['oai'] = idx.oai
+    Data['issn'] = idx.issn
+    Data['downloadUrl'] = idx.downloadUrl
+    Data['fullText'] = idx.fullText
+    Data['publisher'] = idx.publisher
+    Data['abstract'] = idx.abstract
+    Data['datePublished']= idx.datePublished.strftime('%Y-%m-%d')
+    Data['datePublishedYear'] = idx.datePublished.strftime('%Y')
+    Data['dateUpdated'] = idx.dateUpdated
+    Data['pdfHashValue'] = idx.pdfHashValue
+    Data['year'] = idx.year
+    Data['magId'] = idx.magId
+    Data['urls'] = idx.urls
+    Data['relations'] = idx.relations
+    Data['authors'] = idx.authors
+    Data['fullTextIdentifier']= idx.fullTextIdentifier
+    Data['topics'] = idx.topics
+    Data['subjects'] = idx.subjects
+    Data['contributors'] = idx.contributors
+    Data['identifiers'] = idx.identifiers
+    Data['enrichments'] = ast.literal_eval(idx.enrichments)
+    if idx.language:
+        Data['language'] = {k:y for k,y in idx.language.items()}
+    else:
+        Data['language'] = None
+    if idx.journals:
+        journals = []
+        for idy in idx.journals:
+            journal = {}
+            journal['identifiers'] = idy.identifiers
+            journal['title'] = idy.title
+            journals.append(journal)
+        Data['journals'] = journals
+    else:
+        Data['journals'] = None
+    if len(remove_cols)>0:
+        for idx in remove_cols:
+            del Data[idx]
+    print(Data)
+    return Data
+
 
 class Citations:
     def __init__(self):
@@ -85,6 +135,7 @@ class Citations:
                         'referenceCount':'/reference-count/',
                         'citation':'/citation/',
                         'metadata':'/metadata/'}
+        self.excludeContains = [None, '', ' ', 'null', 'NA', 'na', '   ']
     
     def fetchCitationsCount(self, doi:str)->dict:
         try:
@@ -128,6 +179,11 @@ class Citations:
         except Exception as e:
             return {"data":[],"messages":"Error:->{}".format(e)}
         
+    def RelationsCiationRefrence(self,dois:list)->dict:
+        Citations = [self.fetchCitationsCount(idx)[0]['count'] for idx in dois if idx not in self.excludeContains]
+        Ref = [self.fetchRefrencesCount(idx)[0]['count'] for idx in dois if idx not in self.excludeContains]
+        return {'citationsScore':Citations, 'references':Ref}
+        
     async def gather_with_concurrency(self,n, *tasks):
         semaphore = asyncio.Semaphore(n)
         async def sem_task(task):
@@ -169,7 +225,7 @@ class Citations:
 
 class Associations:
     def __init__(self):
-        self.Exe = ['NORP','LOC','GPE', 'New research','Article',"Research"]
+        self.Exe = ['NORP','LOC','GPE', 'New research','Article',"Research", "article", "research"]
         self.cleaned_words = []
         self.logger = logging.getLogger() 
     
@@ -237,7 +293,7 @@ class Associations:
         else:
             return True
     
-    def filtering_Location(self,string:str):
+    def filtering_Location(self,string:list):
         results = []
         for idx in string:
             idx = idx.strip().capitalize()
@@ -335,19 +391,18 @@ class Associations:
         return [idx.max() for idx in self.query_vector.toarray()]
     
     def apply_density(self,codecoverage:list,querywords:list)->list:
-        return [{"word":idx, "coverage":idy} for idx,idy in zip(codecoverage,querywords)]
-
-    def apply_associations(self, associated_word_density:dict, output_DataFrame:dict):
-        if output_DataFrame['Left_Hand_Side'] in associated_word_density:
-            output_DataFrame['Desity'] = associated_word_density[output_DataFrame['Left_Hand_Side']]
-        elif output_DataFrame['Right_Hand_Side'] in associated_word_density:
-            output_DataFrame['Desity'] = associated_word_density[output_DataFrame['Right_Hand_Side']]
-        elif output_DataFrame['Right_Hand_Side'] in associated_word_density and output_DataFrame['Left_Hand_Side'] in associated_word_density:
-            output_DataFrame['Desity'] = associated_word_density[output_DataFrame['Right_Hand_Side']]+associated_word_density[output_DataFrame['Left_Hand_Side']]
-        else:
-            output_DataFrame['Desity'] = 0.0
-        return output_DataFrame
+        return {idy:idx for idx,idy in zip(codecoverage,querywords)}
     
+    def computeCoverage(self,querywords:list)->dict:
+        response = {}
+        for idx,__ in zip(self.query_vector.toarray(),querywords):
+            results = []
+            for idy in self.tfidf_matrix.toarray():
+                score = self.consine_similarity(idx,idy)
+                results.append(score)
+            response[__] = sum(results)/len(self.tfidf_matrix.toarray())
+        return response
+            
     def indirect_association(self,keyword:str,output:list):
         results = []
         for element in output:
@@ -359,25 +414,88 @@ class Associations:
                 element['association'] = "in-direct"
                 element['Left_Hand_Side'] = self.cleanTags(element['Left_Hand_Side']) 
                 element['Right_Hand_Side'] = self.cleanTags(element['Right_Hand_Side'])
+            else:
+                element['association'] = "no-association"
+                element['Left_Hand_Side'] = self.cleanTags(element['Left_Hand_Side']) 
+                element['Right_Hand_Side'] = self.cleanTags(element['Right_Hand_Side'])
             results.append(element)
         return results
     
-    def makeDictionary(self, keyword):
-        pass
-    
+    def makeDictionary(self, keyword, orient:str, reffernceDict:dict=None):
+        dataclass:dict={}
+        dataclass['uuid'] = str(uuid.uuid4())
+        if orient == 'cross_left' and reffernceDict is None:
+            dataclass['keyword'] = keyword['Left_Hand_Side']
+            dataclass['support'] = keyword['Support']
+            dataclass['lift'] = keyword['Lift']
+            dataclass['confidence'] = keyword['Confidence']
+            dataclass['mappedwords'] = []
+            dataclass['mappedwords'].append(keyword['Right_Hand_Side'])
+            dataclass['association'] = keyword['association'] 
+            return dataclass
+        elif orient == 'cross_right' and reffernceDict is None:
+            dataclass['keyword'] = keyword['Right_Hand_Side']
+            dataclass['support'] = keyword['Support']
+            dataclass['lift'] = keyword['Lift']
+            dataclass['confidence'] = keyword['Confidence']
+            dataclass['mappedwords'] = []
+            dataclass['mappedwords'].append(keyword['Left_Hand_Side'])
+            dataclass['association'] = keyword['association'] 
+            return dataclass
+        elif orient == 'cross_left' and reffernceDict:
+            reffernceDict['mappedwords'].append(keyword['Right_Hand_Side'])
+            return reffernceDict
+        elif orient == 'cross_right' and reffernceDict:
+            reffernceDict['mappedwords'].append(keyword['Left_Hand_Side'])
+            return reffernceDict
+        
     def normalizeOutput(self,output:list):
-        records,results = [], []
+        records:dict= {}
         for _,idx in enumerate(output):
-            dataAccess:dict = {}
-            if idx['Left_Hand_Side'] in records:
-                pass
-            elif idx['Right_Hand_Side'] in records:
-                pass
-            else:
-                dataAccess['id'] = _
-                dataAccess['keyword'] = idx
-                pass
-                     
+            if idx['Left_Hand_Side'] not in records and idx['Right_Hand_Side'] not in records:
+                Left = self.makeDictionary(idx,'cross_left')
+                Right = self.makeDictionary(idx,'cross_right')
+                records[idx['Left_Hand_Side']] = Left
+                records[idx['Right_Hand_Side']] = Right
+            elif idx['Left_Hand_Side'] not in records and idx['Right_Hand_Side'] in records:
+                Left = self.makeDictionary(idx,'cross_left', records[idx['Right_Hand_Side']])
+                records[idx['Left_Hand_Side']] = Left
+            elif idx['Right_Hand_Side'] not in records and idx['Left_Hand_Side'] in records:
+                Right = self.makeDictionary(idx,'cross_right', records[idx['Left_Hand_Side']])
+                records[idx['Right_Hand_Side']] = Right
+            elif idx['Right_Hand_Side'] in records and idx['Left_Hand_Side'] in records:
+                Left = self.makeDictionary(idx,'cross_left', records[idx['Right_Hand_Side']])
+                Right = self.makeDictionary(idx,'cross_right', records[idx['Left_Hand_Side']])
+                records[idx['Left_Hand_Side']] = Left
+                records[idx['Right_Hand_Side']] = Right
+        return records
+    
+    def getOutputWords(self, response:list):
+        result = []
+        for idx in response:
+            result.append(idx['Left_Hand_Side'])
+            result.append(idx['Right_Hand_Side'])
+        return list(set(result))
+    
+    def makeFinalResponse(self, response,results,coverageResults,association_dataset):
+        finalResponse,removeDuplicates = [],[]
+        for key,value in response.items():
+            data = value
+            if (key in results and  results[key]>=0.50) or value['association'] != "no-association":
+                data['mappeduuids'] = list(set([response[xelemet]['uuid'] for xelemet in value['mappedwords'] if response[xelemet]['uuid']!= data['uuid']]))
+                data['mappedwords'] = list(set([response[xelemet]['keyword'] for xelemet in list(set(value['mappedwords'])) if response[xelemet]['keyword']!= data['keyword']]))
+                data['coverage'] = coverageResults[key]
+                if key in results:
+                    data['density'] = results[key]
+                else:
+                    data['density'] = 0.0
+                data['coreids']  = association_dataset.index[association_dataset['topics'].str.contains(value['keyword'])].tolist()
+                if value['keyword'] not in removeDuplicates:
+                    finalResponse.append(data)
+                    removeDuplicates.append(value['keyword'])
+                
+        return finalResponse
+            
     def pipeline(self,keyword:str,results:list,min_support:float=0.003,min_lift:int=3,min_length:int=1,max_length:int=2):
         response = mapsets(results, remove_cols=[])
         self.logger.info("Mapping Set Function Executed")
@@ -389,23 +507,23 @@ class Associations:
         self.logger.info("Output Created")
         output_DataFrame = pd.DataFrame(self.inspect(output), columns = ['Left_Hand_Side', 'Right_Hand_Side', 'Support', 'Confidence', 'Lift'])
         self.logger.info("Output DataFrame Created")
-        associated_query = output_DataFrame[(output_DataFrame['Left_Hand_Side'].str.contains(keyword.lower()))|(output_DataFrame['Right_Hand_Side'].str.contains(keyword.lower()))]
+        associatedQuery = output_DataFrame[(output_DataFrame['Left_Hand_Side'].str.contains(keyword.lower()))|(output_DataFrame['Right_Hand_Side'].str.contains(keyword.lower()))]
         self.logger.info("Associated Query Created")
-        associated_query_dict = associated_query.to_dict(orient='records')
+        outputAssociatedQueryDict = output_DataFrame.to_dict(orient='records')
+        outputAssociatedQueryDict = self.indirect_association(keyword,outputAssociatedQueryDict)
+        outputAssociatedQueryDict = [idx for idx in outputAssociatedQueryDict if idx['Lift']>=133 and idx['Confidence']==1]
+        associatedQueryDict = associatedQuery.to_dict(orient='records')
+        AssociatedQueryDict = self.indirect_association(keyword,associatedQueryDict)
+        cumulativeDict = AssociatedQueryDict+outputAssociatedQueryDict
         self.logger.info("Associated Query DICTIONARY Created")
-        associated_query_dict = self.indirect_association(keyword,associated_query_dict)
-        associated_words = list(set(associated_query['Right_Hand_Side'].unique()).union(set(associated_query['Left_Hand_Side'].unique())))
+        associatedWords = list(set(associatedQuery['Right_Hand_Side'].unique()).union(set(associatedQuery['Left_Hand_Side'].unique())))
+        outputWords = self.getOutputWords(outputAssociatedQueryDict)
+        cumulativeWord = associatedWords+self.filtering_Location(outputWords)
+        self.logger.info("Words Collected")
         self.computeDocumentTfidf()
-        self.build_query_vector(associated_words)
-        results = self.apply_density(self.applyQueryCoverage(),associated_words)
-        self.logger.info(results)
-        #associated_words = self.filtering_Location(associated_words)
-        #self.logger.info("Associated Words II Created")
-        #self.logger.info(associated_words)
-        #associated_word_density = [self.get_density(idx) for idx in associated_words]
-        #self.logger.info("Associated Words Density Created")
-        #self.logger.info(associated_word_density)
-        #associated_output = output_DataFrame.apply(lambda x:self.apply_associations(associated_word_density,x),axis=1)
-        #logging.info(associated_query_dict)
-        #logging.info(associated_output.to_dict())
-        return associated_query_dict
+        self.build_query_vector(cumulativeWord)
+        results = self.apply_density(self.applyQueryCoverage(),cumulativeWord)
+        coverageResults = self.computeCoverage(cumulativeWord)
+        self.logger.info("Computation Done")
+        finalResponse = self.makeFinalResponse(self.normalizeOutput(cumulativeDict),results,coverageResults,association_dataset)
+        return finalResponse

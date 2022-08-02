@@ -1,6 +1,6 @@
 from django.urls import include, path
 from .views import (COREFetch, CORETimeline, COREVennDiagram, CitationRefFetch, CitiationsFetch, CitiationsCountFetch,
-                    MetainfoCitationFetch, RefrenceCountFetch, RefrenceFetch)
+                    MetainfoCitationFetch, RefrenceCountFetch, RefrenceFetch, CORECitationsRefrence, COREDocumentByCoreId)
 
 urlpatterns = [
     path('auth/', include('djoser.urls')),
@@ -13,5 +13,7 @@ urlpatterns = [
     path('ai/v1/fetchRefrenceCount/',RefrenceCountFetch.as_view(), name='RefrenceCountFetch'),
     path('ai/v1/fetchRefrence/',RefrenceFetch.as_view(), name='RefrenceFetch'),
     path('ai/v1/fetchCitationMetaInfo/',MetainfoCitationFetch.as_view(), name='MetainfoCitationFetch'),
-    path('ai/v1/fetchCitationsRef/',CitationRefFetch.as_view(), name='CitationRefFetch')
+    path('ai/v1/fetchCitationsRef/',CitationRefFetch.as_view(), name='CitationRefFetch'),
+    path('ai/v1/RefRelationWithCiatation/',CORECitationsRefrence.as_view(), name='CORECitationsRefrence'),
+    path('ai/v1/getDocumentbyCoreId/',COREDocumentByCoreId.as_view(), name='COREDocumentByCoreId')
 ]

@@ -59,6 +59,14 @@ class Database(object):
             return list(row)
         else:
             raise Exception("An error occurred.")
+        
+    @staticmethod
+    def query_coreId(collection:str,keywords:str):
+        try:
+            row = Database.SESSION.execute("""select * from {} where "coreId"='{}';""".format(collection,keywords))
+            return row
+        except Exception as e:
+            return None
             
     @staticmethod
     def change_column_type(table:str,column:str,datatype:str):

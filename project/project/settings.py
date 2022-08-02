@@ -30,7 +30,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env('SECRET_KEY', default='123')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = (env('DEBUG', default='False') == 'True')
+DEBUG = False
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1','0.0.0.0']
 
