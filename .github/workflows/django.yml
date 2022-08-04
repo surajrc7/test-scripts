@@ -21,10 +21,6 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
-#     - name: Install Dependencies
-#       run: |
-#         python -m pip install --upgrade pip
-#         pip install -r requirements.txt
 
 #     - name: Run Unit Test cases
 #       working-directory: ./aimamaproject
@@ -36,17 +32,32 @@ jobs:
 #       run: |
 #         python manage.py runserver
 
-    - name: docker login
-      env:
-        DOCKER_USER: ${{secrets.DOCKER_USER}}
-        DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
-      run: |
-        docker login -u $DOCKER_USER -p $DOCKER_PASSWORD 
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag s6suraj/python:${{ github.sha }}
+#     - name: docker login
+#       env:
+#         DOCKER_USER: ${{secrets.DOCKER_USER}}
+#         DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
+#       run: |
+#         docker login -u $DOCKER_USER -p $DOCKER_PASSWORD 
+#     - name: Build the Docker image
+#       run: docker build . --file Dockerfile --tag s6suraj/python:${{ github.sha }}
       
-    - name: Docker Push
-      run: docker push s6suraj/python:${{ github.sha }}
+#     - name: Docker Push
+#       run: docker push s6suraj/python:${{ github.sha }}
 
+
+    - name: Build and push staging imagess
+      uses: azure/docker-login@v1
+      with:
+        login-server: acrtestt.azurecr.io
+        username: acrtestt
+        password: ${{secrets.ACR_PASSWORD}}
+
+#     - run: |
+#        docker build . -t akstestpubacr.azurecr.io/ms-product:${{ github.sha }}
+#        docker push akstestpubacr.azurecr.io/ms-product:${{ github.sha }}
+       
+    - run: |
+       docker build . -t acrtestt.azurecr.io/python:${{ github.sha }}
+       docker push acrtestt.azurecr.io/python:${{ github.sha }}
 
 
