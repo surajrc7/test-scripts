@@ -31,7 +31,22 @@ jobs:
 #       run: |
 #         python manage.py test
         
-    - name: Build
-      working-directory: ./project
+#     - name: Build
+#       working-directory: ./project
+#       run: |
+#         python manage.py runserver
+
+    - name: docker login
+      env:
+        DOCKER_USER: ${{secrets.DOCKER_USER}}
+        DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
       run: |
-        python manage.py runserver
+        docker login -u $DOCKER_USER -p $DOCKER_PASSWORD 
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile --tag s6suraj/python:$(date +%s)
+      
+    - name: Docker Push
+      run: docker push s6suraj/python
+
+
+
