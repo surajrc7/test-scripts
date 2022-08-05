@@ -9,7 +9,8 @@ import ListItem from "@mui/material/ListItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import CategoryIcon from "@mui/icons-material/Category";
-import DashboardIcon from "@mui/icons-material/Dashboard"
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import LineStyleIcon from '@mui/icons-material/LineStyle';
 import ListAltIcon from "@mui/icons-material/ListAlt";
 
 import { NavLink } from "react-router-dom";
@@ -23,20 +24,26 @@ const listItems = [
     {
         key: "dashboard",
         to: "/",
-        name: "Dashboard",
+        name: "TimeLine",
         icon: <DashboardIcon />
     },
     {
         key: "tasks",
         to: "/tasks",
-        name: "Tasks",
+        name: "VennDiagram",
         icon: <ListAltIcon />
     },
     {
         key: "categories",
         to: "/categories",
-        name: "Categories",
+        name: "Citations Relationships",
         icon: <CategoryIcon />,
+    },
+    {
+        key: "dashboard",
+        to: "/dashboard",
+        name: "Dashboard",
+        icon: <LineStyleIcon />
     },
 ];
 

@@ -7,6 +7,7 @@ import { SnackbarProvider } from "notistack";
 
 import SignUp from "./pages/Auth/SignUp";
 import SignIn from "./pages/Auth/SignIn";
+import Dashboard from "./pages/Home/Dashboard";
 import AuthContextProvider from "./contexts/AuthContextProvider";
 import RequireAuth from "./components/RequireAuth";
 import RequireNotAuth from "./components/RequireNotAuth";
@@ -19,41 +20,50 @@ import ResetPasswordConfirm from "./pages/Auth/ResetPasswordConfirm";
 import ThemeModeProvider from "./contexts/ThemeModeProvider";
 import SwaggerApi from "./pages/SwaggerAPI";
 
+
 export default function App() {
-  return <ThemeModeProvider>
-    <CssBaseline />
-    <AuthContextProvider>
-      <SnackbarProvider>
-        <Router>
-          <Box sx={{
-            bgcolor: (theme) => theme.palette.background.default,
-            minHeight: "100vh",
-            width: "100%"
-          }}>
-            <Routes>
-
-              {/* <Route path="/admin" element={<Admin />} />*/}
-              <Route path="/doc" element={<SwaggerApi/>} /> 
-
-              <Route element={<RequireAuth />}>
-                <Route element={<BaseLayout />}>
+  return (
+    <ThemeModeProvider>
+      <CssBaseline />
+      <AuthContextProvider>
+        <SnackbarProvider>
+          <Router>
+            <Box
+              sx={{
+                bgcolor: (theme) => theme.palette.background.default,
+                minHeight: "100vh",
+                width: "100%",
+              }}
+            >
+              <Routes>
+                {/* <Route path="/admin" element={<Admin />} />*/}
+                <Route path="/doc" element={<SwaggerApi />} />
+   		 <Route element={<BaseLayout />}>
+                   <Route path="/" element={<Dashboard />} />
+                  </Route>
+                <Route element={<RequireAuth />}>
+   
                 </Route>
 
-              </Route>
-
-              <Route element={<RequireNotAuth />} >
-                <Route path="/auth/signup" element={<SignUp />} />
-                <Route path="/auth/signin" element={<SignIn />} />
-                <Route path="/auth/password-reset" element={<RequestResetPassword />} />
-                <Route path="/auth/password-reset/confirm/:uid/:token" element={<ResetPasswordConfirm />} />
-              </Route>
-            </Routes>
-          </Box>
-        </Router>
-      </SnackbarProvider>
-    </AuthContextProvider>
-
-  </ThemeModeProvider>
+                <Route element={<RequireNotAuth />}>
+                  <Route path="/auth/signup" element={<SignUp />} />
+                  <Route path="/auth/signin" element={<SignIn />} />
+                  <Route
+                    path="/auth/password-reset"
+                    element={<RequestResetPassword />}
+                  />
+                  <Route
+                    path="/auth/password-reset/confirm/:uid/:token"
+                    element={<ResetPasswordConfirm />}
+                  />
+                </Route>
+              </Routes>
+            </Box>
+          </Router>
+        </SnackbarProvider>
+      </AuthContextProvider>
+    </ThemeModeProvider>
+  );
 }
 
 ReactDOM.render(<App />, document.getElementById("root"))

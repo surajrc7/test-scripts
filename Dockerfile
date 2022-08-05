@@ -2,6 +2,10 @@ FROM nikolaik/python-nodejs:python3.8-nodejs18-slim
 
 # Install curl, node, & yarn
 WORKDIR /app/frontend
+RUN apt-get update && apt-get install -y --no-install-recommends gfortran libopenblas-dev liblapack-dev && rm -rf /var/lib/apt/lists/*
+RUN pip3 install cython
+RUN apt update && apt install -y --no-install-recommends g++ && apt remove -y g++ && rm -rf /var/lib/apt/lists/*
+RUN python -m pip install setuptools
 
 RUN npm i yarn
 COPY ./project /app/project
@@ -11,10 +15,6 @@ RUN yarn install
 WORKDIR /app/project
 # Install Python dependencies
 COPY ./project/requirements.txt /app/project/
-RUN apt-get update && apt-get install -y --no-install-recommends gfortran libopenblas-dev liblapack-dev && rm -rf /var/lib/apt/lists/*
-RUN pip3 install cython
-RUN apt update && apt install -y --no-install-recommends g++ && apt remove -y g++ && rm -rf /var/lib/apt/lists/*
-RUN python -m pip install setuptools
 RUN pip install -r requirements.txt
 
 WORKDIR /app
